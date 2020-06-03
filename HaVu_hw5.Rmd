@@ -1,0 +1,180 @@
+---
+title: "HaVu_hw5"
+author: "Vu Thi-Hong-Ha"
+date: "April 28, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("M3C")
+library("tidyverse")
+library("matrixStats")
+library("gridExtra")
+library("Seurat")
+```
+
+###Part 1
+
+```{r}
+gbm <- mydata
+annot <- desx
+annot$class <- as.character(annot$class)
+annot[is.na(annot$class), 1] <- "NA"
+```
+
+**PCA**
+```{r}
+gbm.pca <- prcomp(t(gbm), center = T, scale. = T)
+summary(gbm.pca)$importance[, 1:10]
+
+#Scree plot for PCA
+screeplot(gbm.pca, type = "l", npcs = 15, main = "Screeplot of the first 10 PCs")
+abline(h = 50, col = "red", lty = 5)
+legend("topright", legend = c("Eigenvalue = 50"), col = c("red"), lty = 5, cex = 0.6)
+
+cumpro <- cumsum(gbm.pca$sdev^2 / sum(gbm.pca$sdev^2))
+plot(cumpro[0:25], xlab = "PC #", ylab = "Amount of explained variance", main = "Cumulative variance plot")
+abline(v = 7, col = "blue", lty = 5)
+abline(h = 0.57757, col = "blue", lty = 5)
+abline(v = 20, col = "red", lty = 5)
+abline(h = 0.80822, col = "red", lty = 5)
+legend("topleft", legend = c("Cut off @ PC7", "PC20"),
+       col = c("blue", "red"), lty = 5, cex = 0.6)
+```
+
+By this screeplot, I choose to cut off at PC7. However, the first 20 PCs are only enough to explain ~80\% of the data set. Next I use `facoextra` and `M3C` libraries to plot the first 2 PCs. We can see that they are slightly different in the number of percentages the first 2 PCs can capture.
+
+```{r, message=FALSE}
+# plots PCs 1 and 2 labelled
+factoextra::fviz_pca_ind(gbm.pca, geom = "point", pointshape = 21, pointsize = 2,
+                         fill.ind = annot$class, palette = "jco",
+                         addEllipses = FALSE, repel = TRUE,
+                         legend.title = "Classification") +
+  ggtitle("2D PCA-plot from GBM dataset") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+M3C::pca(gbm, labels = as.factor(annot$class), dotsize = 2.5) + ggtitle("M3C PCA") #slightly different from prcomp()
+```
+
+In general, `Mesenchymal`, `Neural`, `Proneural` and `Classical` are quite separate, with `Classical` and `Neural` are somewhat mixed up. The cells that we don't have any information about (i.e. `NA`) are scattering all over the plots. <br />
+
+**T-SNE** and **UMAP**: <br />
+Maximum perplexity for T-SNE is 16. For the
+
+```{r, message=FALSE}
+###T-SNE
+#16 is max perplexity
+gbm.tsne5 <- tsne(gbm, perplex = 5, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 5")
+gbm.tsne6 <- tsne(gbm, perplex = 6, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 6")
+gbm.tsne7 <- tsne(gbm, perplex = 7, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 7")
+gbm.tsne8 <- tsne(gbm, perplex = 8, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 8")
+gbm.tsne9 <- tsne(gbm, perplex = 9, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 9")
+gbm.tsne10 <- tsne(gbm, perplex = 10, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 10")
+gbm.tsne11 <- tsne(gbm, perplex = 11, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 11")
+gbm.tsne12 <- tsne(gbm, perplex = 12, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 12")
+gbm.tsne13 <- tsne(gbm, perplex = 13, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 13")
+gbm.tsne14 <- tsne(gbm, perplex = 14, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 14")
+gbm.tsne15 <- tsne(gbm, perplex = 15, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 15")
+gbm.tsne16 <- tsne(gbm, perplex = 16, dotsize = 2, labels = as.factor(annot$class), legendtextsize = 10) + ggtitle("T-SNE, Perplex = 16")
+
+grid.arrange(gbm.tsne5, gbm.tsne6, gbm.tsne7, gbm.tsne8, nrow = 2, ncol = 2)
+grid.arrange(gbm.tsne9, gbm.tsne10, gbm.tsne11, gbm.tsne12, nrow = 2, ncol = 2)
+grid.arrange(gbm.tsne13, gbm.tsne14, gbm.tsne15, gbm.tsne16, nrow = 2, ncol = 2)
+
+
+###UMAP
+umap(gbm, labels = as.factor(annot$class), dotsize = 2.5) + ggtitle("M3C UMAP")
+
+```
+
+With the above plots, we can see that higher perplexity is better in this case. Both T-SNE and UMAP plots agree with PCA. <br />
+
+
+###Part 2
+
+For this part, I'm going to test `RunUMAP` fuction of library `Seurat`, so I save the count data into 2 tables. For the filtering, I remove genes that have 0 counts across all samples. I then log transform the data.
+
+```{r}
+load("D:/Coursework/BCB 570 Spring 2020/Homework5/dimRed.RData/dimRed.RData")
+names(Biocond_High) <- colnames(counts_hi)
+counts_hi <- counts_hi[rowSums(counts_hi != 0) != 0,]
+
+countsSEURAT <- counts_hi
+
+counts_hi <- log(counts_hi + 1) #M3C
+```
+
+**PCA**
+
+```{r}
+###PCA
+high.pca <- prcomp(t(counts_hi), center = T, scale. = T)
+summary(high.pca)$importance[, 1:10]
+
+#Scree plot for PCA
+screeplot(high.pca, type = "l", npcs = 20, main = "Screeplot of the first 20 PCs")
+abline(h = 350, col = "red", lty = 5)
+legend("topright", legend = c("Eigenvalue = 300"), col = c("red"), lty = 5, cex = 0.6)
+```
+
+The data is complex, and the first 10 PCs can only capture a small portion of the data. This suggests PCA might not be a suitable grouping method. I chose the PC cut off to be PC7. Let's look at the plot.
+
+```{r, message=F}
+# plots PCs 1 and 2 labelled
+factoextra::fviz_pca_ind(high.pca, geom = "point", pointshape = 21, pointsize = 2,
+                         fill.ind = as.factor(Biocond_High), palette = "jco",
+                         addEllipses = FALSE, repel = TRUE,
+                         legend.title = "Classification") +
+  ggtitle("2D PCA-plot from high coverage dataset") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+M3C::pca(counts_hi, labels = as.factor(Biocond_High), dotsize = 2.5) + ggtitle("M3C PCA")
+```
+
+This plot agrees with the original plot in the paper (Supplemental Figure 8, see below). Note that in Supplemental Figure 7, the authors did PCA on low coverage data, while we only have neural cells. However, the sepration is the same (`NPC` and `GW21+3` are well separated, while `GW16` and `GW21` are mixing up). <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework5\\sup8.PNG){width=50% height=50%} <br />
+
+**T-SNE**
+```{r, message=F}
+##T-SNE
+tsne(counts_hi, labels = as.factor(Biocond_High), perplex = 5, dotsize = 2.5) + ggtitle("T-SNE, Perplex = 5")
+tsne(counts_hi, labels = as.factor(Biocond_High), perplex = 7, dotsize = 2.5) + ggtitle("T-SNE, Perplex = 7")
+tsne(counts_hi, labels = as.factor(Biocond_High), perplex = 10, dotsize = 2.5) + ggtitle("T-SNE, Perplex = 10")
+tsne(counts_hi, labels = as.factor(Biocond_High), perplex = 21, dotsize = 2.5) + ggtitle("T-SNE, Perplex = 21") #max perplexity
+```
+
+**UMAP** <br />
+
+For this part, I will test out `Seurat` package also. As far as I know, `RunUMAP` in `Seurat` only serves as a plot function, but the underlying grouping method relies heavily on the functions `FindNeighbots` and `FindClusters`. I notice that these two functions do not separate the samples according to cell types, although the separation is close. Please refer to the following code and plots:
+
+```{r, message=F, warning=F}
+##UMAP
+M3C::umap(counts_hi, labels = as.factor(Biocond_High), dotsize = 2.5) + ggtitle("M3C UMAP")
+
+##UMAP
+neurals <- CreateSeuratObject(countsSEURAT, meta.data = as.data.frame(Biocond_High))
+
+features <- rownames(countsSEURAT)
+neurals <- NormalizeData(neurals)
+neurals <- ScaleData(neurals, features = features)
+
+neurals <- RunPCA(neurals, features = features)
+
+neurals <- FindNeighbors(neurals, dims = 1:7)
+neurals <- FindClusters(neurals, resolution = 1.2)
+
+neurals <- RunUMAP(neurals, dims = 1:7)
+DimPlot(neurals, reduction = "umap") + ggtitle("Seurat UMAP")
+
+```
+
+```{r}
+head(Idents(neurals), 5)
+unique(Biocond_High[which(Idents(neurals) == 0)])
+unique(Biocond_High[which(Idents(neurals) == 1)])
+unique(Biocond_High[which(Idents(neurals) == 2)])
+unique(Biocond_High[which(Idents(neurals) == 3)])
+```
+
+In this separation, all groups are mixture of cell types. Group 0 contains all `NPC` samples, and `NPC` samples are also the majority of Group 0. The majority of Group 1 is `GW21+3`. The majority of Group 2 is `GW16`. Last but not least, the majority of Group 2 is is `GW21`. We can still see the separation similar to these in `T-SNE` and `PCA`.

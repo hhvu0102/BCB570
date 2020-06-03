@@ -1,0 +1,420 @@
+---
+title: "Homework 4"
+author: "Ha Vu; Jia Liu"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+library("reticulate", suppressMessages())
+library("tidyverse", suppressMessages())
+library("PRROC", suppressMessages())
+workingDir <- "."
+setwd(workingDir)
+library("WGCNA")
+options(stringsAsFactors = FALSE)
+library("ggplot2")
+library("igraph")
+```
+
+## Problem 1
+
+#### (a)
+Bagging process:
+For a given standard training set A of size n, bagging samples from set A randomly, uniformly and with replacement to form m new training sets $A_i$ with size $n'$. Bagging then applies methods such as classification or regression on the m new training sets to form m new models. By taking the average or median or whatever methods to summarize the output from m models, Bagging gets its result.
+
+#### (b)
+$mean = 1.97$ and $variance = 7.49$ (the values may change since the randomness while generating the list of random variables)
+```{r}
+norm100 <- rnorm(100, mean = 2, sd = sqrt(8))
+mean(norm100)
+var(norm100)
+```
+
+
+#### (c)
+
+```{r}
+subsamples_mean <- c()
+subsamples_var <- c()
+
+for (i in 1:20)
+{
+  subs <- sample(norm100, 10, replace = TRUE)
+  m <- mean(subs)
+  v <- var(subs)
+  
+  subsamples_mean <- c(subsamples_mean, m)
+  subsamples_var <- c(subsamples_var, v)
+}
+
+median(subsamples_mean)
+median(subsamples_var)
+hist(subsamples_mean)
+hist(subsamples_var)
+```
+
+I used the histogram as well as median of means and variances separately, and got the estimate $mean = 2.21$ and $variance = 8.63$
+
+## Problem 2
+
+#### (a)
+In order to create an association network, we can follow the key steps as listed here:
+1. Decide on a similarity measure between the biological factors of interest (for example, genes or proteins).
+2. Compute a similarity score for each pair of biological factors of interest (genes/proteins/…). <br />
+3. If similarity is above a given threshold, connect the biological factors. <br />
+Depending on the algorithm or method, there could be different types of edges. For instance, correlation methods (such as WGCNA) can infer edges no matter if gene pairs are positively or negatively correlated, meaning that we have an (undirected) association between the two genes. With feature selection approaches (such as GENIE3), we may be able to infer directed edges between genes. <br />
+4. Explore the inferred network with different clustering algorithms (such as MCL) or network characteristic. <br />
+
+
+#### (b)
+We propose am algorithm that one can follow: <br />
+- Data type of interest: gene expression data such as RNA-seq. <br />
+- Organism of interest: mice. <br />
+This algorithm relies heavily on two assumptions: <br />
+A1: If an association is important for some biological process of interest, that association should be strong on both gene and protein level. <br />
+A2: If a gene is highly expressed, assume that gene will be translated into protein. <br />
+The algorithm can be mapped out as the following: <br />
+0. Preprocessing the data: <br />
+This is an important step to make sure that the data has good quality for any downstream analysis. Some suggested ways of preprocessing the data are: <br />
+-	Clustering datasets with respect to conditions/time points/tissues/… in order to identify possible outlier samples. Common methods are Principle Component Analysis or hierarchical clustering. <br />
+-	Filtering out low abundance genes to remove noise. <br />
+Depending on the biological questions, one can also choose to use only the most variable genes across different conditions, or the most expressed genes across all conditions, so that they can focus on the strongest signaled genes for their analysis. <br />
+1. Performing network inferences on both gene and protein level using different methods: <br />
+The methods we suggest using in our algorithm is: <br />
+-	Gene – gene co-expression (correlation method) by WGCNA. <br />
+-	Protein – protein interaction by StringDB. <br />
+-	Protein – gene interaction by GENIE3. <br />
+1.1.	Gene – gene co-expression (correlation method) by WGCNA. <br />
+According to WGCNA documentation, we should go for soft thresholding and estimate the power of the power-law distribution. They recommend choosing the first power that gets the $R^2$ to be 0.8 or 0.9. If there is no power-law for the data, it can indicate either very interesting biological aspect, or noise of the data. There are also choice of signed or unsigned network type that is up to the researchers to chooce. <br />
+
+1.2. Protein – protein interaction by StringDB. <br />
+The reason we choose StringDB is that: StringDB has intensive database of mice (our animal model), and also humans, so it is easy to get the relationships between mice and humans, if any. Secondly, StringDB has very good web interface, so it is convenient to do some primary testing on their website. Last but not least, StringDB is built-in with Cytoscape, so it is easy for one to explore the PPI within Cytoscape. <br />
+For StringDB, we can choose different type of evidence for the interaction. If one wishes to have very strong evidence for the interactions, they can choose evidence to be experiments, database and co-epression. Moreover, they can also set the edge score to be 0.7, which is defined to be high confidence for the edge. <br />
+
+1.3. Protein – gene interaction by GENIE3. <br />
+One strong point of GENIE3 is it does not require users to input any parameters. It is useful to note that if we have a list of candidate TFs, GENIE3 will give a directed network; otherwise, the result is undirected nework. <br />
+
+2. Once we get the networks as results of the three steps listed above, we can get the edges that appear in at least 2 of the three analyses. That way, we will have very strong evidence in the interaction of the genes/proteins. This approach might be stringent and only suitable for a model whose a lot of data like mice.
+
+
+## Problem 4
+
+
+#### (a)  
+1. Describe how the method finds associations between genes <br />
+- Problem definitions and notations from dynGENIE3 paper (https://www.nature.com/articles/s41598-018-21715-0): <br />
+The dynGENIE3 tool has two expression dataset: $D_{TS}$ and possibly $D_{SS}$.  <br />
+$D_{TS}$ is the time series dataset, contains the expression levels of p genes, measured at N time points following a perturbation of the network:
+$$
+D_{TS} = \{x(t_1), x(t_2), ..., x(t_N)\}
+$$
+where $x(t_k) \sim R^p, k = 1, ..., N$ is a vector containing the gene expression values at the k-th time point: 
+$$
+x(t_k) = (x_1(t_k),x_2(t_k), ..., x_p(t_k))^T
+$$
+$D_{SS}$ is the steady-state dataset which contains the expression levels of the same p genes, measured in M experimental conditions once the system has reached some equilibrium point:
+$$
+D_{SS} = \{x(e_1), x(e_2), ..., x(e_M)\}
+$$
+where $x(e_k) \sim R^p, k = 1, ..., M$ is a vector containing the expression values at steady-state of the p genes in the k-th condition:
+$$
+x(e_k) = (x_1(e_k),x_2(e_k), ..., x_p(e_k))^T
+$$
+In order to assign weights $w_{ij} \ge 0, (i, j = 1, ..., p)$ to putative regulatory links from any gene i to any gene j, Huynh-Thu et.al employed $D_{TS}$ as well as $D_{SS}$ potentially. <br />
+- dynGENIE3 for time series data
+Taking the dependence between time points into account, dynGENIE3 models the expression level of gene j with an ordinary differential equation (ODE):
+$$
+\frac{dx_j(t)}{dt} = -\alpha_jx_j(t) + f_j (x(t)), \forall j
+$$
+Here we will assume that the transcription rate of x is a function $f_j$ of the expression levels of the p genes (potentially can include the gene j itself) and $\alpha_j$ is a parameter specifying the decay rate of $x_j$.
+Then the above ODE can be approximated by
+$$
+\frac{x_j(t_{k+1}) - x_j (t_k)}{t_{k+1 - t_k}} + \alpha_j x_j(t_k) = f_j(x(t_k)), k = 1, ..., N-1
+$$
+then the function $f_j$ can be learned using the learning sample below:
+$$
+LS_{TS}^j = \{(x(t_k), \frac{x_j(t_{k+1}) - x_j (t_k)}{t_{k+1 - t_k}} + \alpha_j x_j(t_k)), k= 1, ..., N-1\}
+$$
+- dynGENIE3 for time series and steady-state data    
+$\frac{dx_j(t)}{dt} = 0$ at steady state, thus the ODE function simplifies to
+$$
+\alpha_jx_j(t) = f_j(x(t)), \forall j
+$$
+Thus the final learning sample $LS^j$ is just a concatenating of two types of data (time series and steady-state):
+$$
+LS^j = LS_{TS}^j \cup LS_{SS^j}
+$$
+where 
+$$
+\begin{aligned}
+LS_{TS}^j &= \{(x(t_k), \frac{x_j(t_{k+1}) - x_j (t_k)}{t_{k+1 - t_k}} + \alpha_j x_j(t_k)), k= 1, ..., N-1\} \\
+LS_{SS}^j &= \{(x(e_{k^1}), \alpha_jx_j(e_{k^1})), k^1 = 1, ..., M\} 
+\end{aligned}
+$$
+2. Describe how you are thresholding the network in each case <br />
+From both the paper and tutorial of dynGENIE3, the authors mentioned that "the weights of the links returned by dynGENIE3() do not have any statistical meaning and only provide a way to rank the regulatory links. There is therefore no standard threshold value, and caution must be taken when choosing one". Here we propose a threshold of top $5\%$ of the ranked links are significant.
+
+
+#### (b)
+As it was more convenient to run dynGENIE3 in Python, we carried out the dynGENIE3 analysis in Python with the following code: <br >
+- About how to run dynGENIE3: follow the documentation in this link: https://github.com/vahuynh/dynGENIE3/tree/master/dynGENIE3_python, we cloned all folders to our local machine, and ran the source code `dynGINIE3.py` so that we can import it in our script. <br />
+- About our analysis: as we can analyze all the data provided (time-series, heterozygous and null mutant datasets), we carried out 3 analyses: dynGENIE3 on time-series data only, dynGENIE3 on time-series data and heterozygous data, and dynGENIE3 on time-series data and null mutant data. <br />
+
+
+```{python, eval = F}
+
+import dynGENIE3 as dg
+import numpy as np
+import pandas as pd
+
+
+#load time-series data and do some data-frame manipulation
+all_TS_data = pd.read_csv("D:/Coursework/BCB 570 Spring 2020/Homework4/NIHW in silico data/NIHW in silico data/Size100/DREAM3 data/InSilicoSize100-Ecoli1-trajectories.tsv", sep = "\t", header = 0)
+time = all_TS_data['Time'].astype(int) #extract the time points information
+all_TS_data = all_TS_data.drop(['Time'], axis = 1) #save expression data separately
+
+TS_data = []
+time_points = []
+
+i = 0
+while i <= len(all_TS_data)-1: #len(all_TS_data)-1 = total number of lines in the dataset
+  TS_data.append(np.array(all_TS_data[i:(i+21)]))
+time_points.append(np.array(time[i:(i+21)]))
+i = i+21
+
+
+#run dynGENIE3 on time-series data and heterozygous steady-state data
+#load heterozygous steady-state data
+SS_data_hete = pd.read_csv("D:/Coursework/BCB 570 Spring 2020/Homework4/NIHW in silico data/NIHW in silico data/Size100/DREAM3 data/InSilicoSize100-Ecoli1-heterozygous.tsv", sep = "\t", header = 0)
+SS_data_hete = SS_data_hete.drop(['strain'], axis = 1)
+SS_data_hete = np.array(SS_data_hete)
+
+#run dynGENIE3
+(VIM_hete, alphas_hete, prediction_score_hete, stability_score_hete, treeEstimators_hete) = dg.dynGENIE3(TS_data, time_points, SS_data = SS_data_hete)
+
+#get the link table and save the results
+dg.get_link_list(VIM_hete, file_name = "D:/Coursework/BCB 570 Spring 2020/Homework4/link_heterozygous.txt")
+
+
+#run dynGENIE3 on time-series data and null-mutant steady-state data
+#load null-mutant steady-state data
+SS_data_null = pd.read_csv("D:/Coursework/BCB 570 Spring 2020/Homework4/NIHW in silico data/NIHW in silico data/Size100/DREAM3 data/InSilicoSize100-Ecoli1-null-mutants.tsv", sep = "\t", header = 0)
+SS_data_null = SS_data_null.drop(['strain'], axis = 1)
+SS_data_null = np.array(SS_data_null)
+
+#run dynGENIE3
+(VIM_null, alphas_null, prediction_score_null, stability_score_null, treeEstimators_null) = dg.dynGENIE3(TS_data, time_points, SS_data=SS_data_null)
+
+#get the link table and save the results
+dg.get_link_list(VIM_null, file_name = "D:/Coursework/BCB 570 Spring 2020/Homework4/link_nullmutants.txt")
+
+
+
+#run dynGENIE3 on time-series data
+#run dynGENIE3
+(VIM_ts, alphas_ts, prediction_score_ts, stability_score_ts, treeEstimators_ts) = dg.dynGENIE3(TS_data, time_points)
+
+#get the link table and save the results
+dg.get_link_list(VIM_ts, file_name = "D:/Coursework/BCB 570 Spring 2020/Homework4/link_timeseries.txt")
+
+```
+
+Till this end, we use R to calculate PRC for each analysis:
+```{r}
+true <- read.table("D:/Coursework/BCB 570 Spring 2020/Homework4/NIHW in silico data/NIHW in silico data/Size100/DREAM3 gold standards/DREAM3GoldStandard_InSilicoSize100_Ecoli1.txt", header = F, sep = '\t')
+
+hete_results <- read.table("D:/Coursework/BCB 570 Spring 2020/Homework4/link_heterozygous.txt", header = F, sep = '\t')
+hete <- inner_join(hete_results, true, by = c("V1", "V2")) #to get the correct corresponding results for each gene pair
+hete_scores <- hete$V3.x
+true_lables_hete <- hete$V3.y
+
+pr_hete <- pr.curve(scores.class0 = hete_scores, weights.class0 = true_lables_hete, curve = T)
+pr_hete
+plot(pr_hete)
+
+
+null_results <- read.table("D:/Coursework/BCB 570 Spring 2020/Homework4/link_nullmutants.txt", header = F, sep = '\t')
+null <- inner_join(null_results, true, by = c("V1", "V2")) #to get the correct corresponding results for each gene pair
+null_scores <- null$V3.x
+true_lables_null <- null$V3.y
+
+pr_null <- pr.curve(scores.class0 = null_scores, weights.class0 = true_lables_null, curve = T)
+pr_null
+plot(pr_null)
+
+
+
+
+ts_results <- read.table("D:/Coursework/BCB 570 Spring 2020/Homework4/link_timeseries.txt", header = F, sep = '\t')
+ts <- inner_join(ts_results, true, by = c("V1", "V2")) #to get the correct corresponding results for each gene pair
+ts_scores <- ts$V3.x
+true_lables_ts <- ts$V3.y
+
+pr_ts <- pr.curve(scores.class0 = ts_scores, weights.class0 = true_lables_ts, curve = T)
+pr_ts
+plot(pr_ts)
+```
+
+We can see that dynGENIE3 performs slightly better on the time-series data, but the precision is still pretty poor.
+
+#### (c)
+As dynGENIE3 cannot analyze steady-state data on its own, we decided to try a tool that is not dynGENIE3 or is used by other groups. The method of our choice is WGCNA. <br />
+First, we load the data and do some preprocessing to filter out any low count genes or outlier samples:
+
+```{r}
+#load data
+ecoli <- read.table("D:/Coursework/BCB 570 Spring 2020/Homework4/TrainingDataEcoli/net3_expression_data.tsv", header = T)
+
+goodSamplesGenes(ecoli)$allOK #check if there are any low count genes that need being filtered out
+                        #the results indicate that all genes are good for next steps
+
+#hierarchical clustering with respect to samples to get any sample outliers
+sampleTree <- hclust(dist(log2(ecoli)), method = "average")
+
+#plot hierarchical clustering
+sizeGrWindow(12, 9)
+par(cex = 0.6)
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers", sub = "", xlab = "", cex.lab = 1.5,
+     cex.axis = 1.5, cex.main = 2, labels = F)
+
+#determine cluster under the line
+clust = cutreeStatic(sampleTree, cutHeight = 14, minSize = 10)
+table(clust)
+
+# clust 1 contains the samples we want to keep.
+keepSamples <- (clust == 1)
+ecoli2 <- ecoli[keepSamples, ]
+nGenes <- ncol(ecoli2)
+nSamples <- nrow(ecoli2)
+```
+
+Next, we analyze the data with two options: signed networks or unsigned networks. This is an interesting option as signed and unsigned type lead to very different networks. Let's try unsigned network first. Note that the candidate power choice is set according to WGCNA documentation (https://horvath.genetics.ucla.edu/html/CoexpressionNetwork/Rpackages/WGCNA/faq.html). <br />
+
+```{r}
+#unsigned network ####
+powers = c(c(1:10), seq(from = 12, to = 24, by = 2)) #set candidate powers
+sft <- pickSoftThreshold(ecoli2, dataIsExpr = TRUE, powerVector = powers, networkType = "unsigned")
+
+sizeGrWindow(9, 5)
+par(mfrow = c(1, 2))
+cex1 = 0.9
+
+# Scale-free topology fit index as a function of the soft-thresholding power
+plot(sft$fitIndices[, 1], -sign(sft$fitIndices[, 3])*sft$fitIndices[, 2], xlab = "Soft Threshold (power)", ylab = "Scale Free Topology Model Fit, unsiged signed R^2", type="n", main = paste("Scale independence"))
+text(sft$fitIndices[, 1], -sign(sft$fitIndices[, 3])*sft$fitIndices[, 2], labels = powers, cex = cex1, col = "red")
+
+# Red line corresponds to using an R^2 cut-off
+abline(h = 0.90, col = "red")
+
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[, 1], sft$fitIndices[, 5], xlab = "Soft Threshold (power)", ylab = "Mean Connectivity", type = "n", main = paste("Mean connectivity"))
+text(sft$fitIndices[, 1], sft$fitIndices[, 5], labels = powers, cex = cex1, col = "red")
+
+
+softPower <- 6
+
+#calculate the adjacency matrix
+adjacency <- adjacency(ecoli2, type = "unsigned", power = softPower)
+adjacency[adjacency < 0] = 0
+adjacency[adjacency > 1] = 1
+
+#turn adjacency matrix into a topological overlap matrix (TOM) to minimize the effects of noise and spurious associations
+TOM <- TOMsimilarity(adjacency, TOMType = "unsigned")
+
+adj <- TOM
+adj[adj > 0.1] = 1
+adj[adj != 1] = 0
+network <- graph.adjacency(adj, mode = "undirected")
+network <- simplify(network)  # removes self-loops
+# remove unconnected nodes
+network <- delete.vertices(network, degree(network) == 0)
+```
+
+Looking at the plots above, we see that 6 is a decent choice of power as it is the smallest threshold that gets $R^2$ to be 0.9. <br />
+
+
+It is also interesting to see the signed network. The following code will do the job. However, we will not execute it for now.
+
+```{r, eval = FALSE}
+powers = c(c(1:10), seq(from = 12, to = 24, by = 2)) #set candidate powers
+sft_signed <- pickSoftThreshold(ecoli2, dataIsExpr = TRUE, powerVector = powers, networkType = "signed")
+
+sizeGrWindow(9, 5)
+par(mfrow = c(1, 2))
+cex1 = 0.9
+
+# Scale-free topology fit index as a function of the soft-thresholding power
+{plot(sft_signed$fitIndices[, 1], -sign(sft_signed$fitIndices[, 3])*sft_signed$fitIndices[, 2], xlab = "Soft Threshold (power)", ylab = "Scale Free Topology Model Fit, signed R^2", type = "n", main = paste("Scale independence"))
+text(sft_signed$fitIndices[, 1], -sign(sft_signed$fitIndices[, 3])*sft_signed$fitIndices[, 2], labels = powers, cex = cex1, col = "red")}
+
+# Red line corresponds to using an R^2 cut-off
+abline(h = 0.90, col = "red")
+
+# Mean connectivity as a function of the soft-thresholding power
+#plot(sft_signed$fitIndices[,1], sft_signed$fitIndices[,5], xlab = "Soft Threshold (power)", ylab = "Mean Connectivity", type = "n", main = paste("Mean connectivity"))
+#text(sft_signed$fitIndices[,1], sft_signed$fitIndices[,5], labels = powers, cex = cex1, col = "red")
+
+
+softPower_signed <- 12
+
+#calculate the adjacency matrix
+adjacency_signed <- adjacency(ecoli2, type = "signed", power = softPower_signed)
+adjacency_signed[adjacency_signed < 0] = 0
+adjacency_signed[adjacency_signed > 1] = 1
+
+#turn adjacency matrix into a topological overlap matrix (TOM) to minimize the effects of noise and spurious associations
+TOM_signed <- TOMsimilarity(adjacency_signed, TOMType = "signed")
+
+adj_signed <- TOM_signed
+adj_signed[adj_signed > 0.1] = 1
+adj_signed[adj_signed != 1] = 0
+network_signed <- graph.adjacency(adj_signed, mode = "undirected")
+network_signed <- simplify(network_signed)  # removes self-loops
+# remove unconnected nodes
+network_signed <- delete.vertices(network_signed, degree(network_signed) == 0)
+
+```
+
+Here the power of 12 is the smallest power that gets the value $R^2$ to be greater 0.9, so we choose power to be 12. <br />
+
+
+
+Doing some quick analysis, we get the following observation: <br/>
+
+| Network  | No of Vertices | No of Edges | Connectedness | No of Connected Components |
+|----------|----------------|-------------|---------------|----------------------------|
+| Unsigned | 4511           | 87335       | No            | 2263                       |
+| Signed   | 4511           | 1141605     | No            | 636                        |
+
+The question of using signed or unsigned networks is up to the datasets and the biological questions of interest. Here, we cross check the unsigned network with the gold standard.
+
+```{r}
+geneMap <- read.table("D:/Coursework/BCB 570 Spring 2020/Homework4/TrainingDataEcoli/net3_gene_ids.tsv", sep = "", header = F)
+names(geneMap) <- c("id", "name")
+
+unsigned <- as_edgelist(network)
+unsigned <- as.data.frame(unsigned)
+unsigned$V1 <- paste("G", unsigned$V1, sep = "")
+unsigned$V2 <- paste("G", unsigned$V2, sep = "")
+names(unsigned) <- c("source", "target")
+
+#map the IDs with the gene names
+unsigned2 <- merge(unsigned, geneMap, by.x = "source", by.y = "id")
+names(unsigned2) <- c("sourceID", "targetID", "sourceName")
+
+unsigned3 <- merge(unsigned2, geneMap, by.x = "targetID", by.y = "id")
+names(unsigned3) <- c("sourceID", "targetID", "sourceName", "targetName")
+
+goldstandard <- read.table("D:/Coursework/BCB 570 Spring 2020/Homework4/ecoli_goldStandard.txt", header = F, sep = "\t")
+goldstandard <- goldstandard[, 1:5]
+goldstandard <- subset(goldstandard, goldstandard$V5 != "null") #only keep edges with evidence
+names(goldstandard) <- c("sourceName", "targetName", "direction", "evidence", "evidenceType")
+
+#check <- inner_join(unsigned3, goldstandard, by = c("sourceName", "targetName"))
+check <- merge(unsigned3, goldstandard, by = c("sourceName", "targetName"))
+dim(check)
+```
+
+We can see that there is none of the predicted edges are confirmed by the gold standard. This might indicate that we should look at the signed network instead. It is also up to the researchers to test different sets of parameters and network types.

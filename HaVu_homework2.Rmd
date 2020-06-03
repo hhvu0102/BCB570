@@ -1,0 +1,332 @@
+---
+title: "Homework 1"
+author: "Vu Thi-Hong-Ha, NetID: 851924086"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+library('igraph', suppressMessages())
+library('dplyr', suppressMessages())
+library('ggplot2', suppressMessages())
+```
+
+## Question 1:
+a) *Plot the connectivity distribution of k vs. P(k)* <br />
+Step 1: Determine the number of neighbors for each node: <br />
+$$k_u = 2; k_w = 4, k_v = 4, k_y = 4, k_x = 4, k_z = 5, k_r = 4, k_t = 3, k_s = 2$$
+Step 2: Plot the connectivity distribution: <br />
+```{r}
+nodes <- c("u", "w", "v", "y", "x", "z", "r", "t", "s")
+k_nodes <- as.numeric(c(2, 4, 4, 4, 4, 5, 4, 3, 2))
+info <- data_frame(nodes, k_nodes) #summary of the nodes
+info %>% 
+  group_by(k_nodes) %>% 
+  summarise(n = n()) %>% 
+  mutate(freq = n / sum(n)) %>% 
+  ggplot(aes(x = k_nodes, y = freq)) + geom_bar(stat = "identity") + 
+  xlim(c(0, 6)) + ylim(c(0, 1)) +  
+  labs(x = "k", y = "P(k)", title = "Connectivity distribution: k vs. P(k)")
+
+```
+
+b) *Plot the clustering coefficients of k vs. C(k)* <br />
+Step 1: Determine the clustering coefficient of each node: <br />
+$$C_u = 1; C_w = \frac{1}{2}, C_v = \frac{1}{2}, C_y = \frac{2}{3}, C_x = \frac{1}{2}, C_z = \frac{2}{5}, C_r = \frac{1}{2}, C_t = \frac{2}{3}, C_s = 1$$
+Step 2: Associate the above information to each node in our information table and plot. If one k has different C(k) values, we take the average of all C(k) for that k.
+```{r}
+Ck <- as.numeric(c(1, 1/2, 1/2, 2/3, 1/2, 2/5, 1/2, 2/3, 1)) #clustering coefficient vector
+info <- data.frame(info, Ck)
+info %>% 
+  group_by(k_nodes) %>% 
+  summarise_at("Ck", mean) %>% 
+  ggplot(aes(x = k_nodes, y = Ck)) + geom_bar(stat = "identity") + 
+  xlim(c(0, 6)) + ylim(c(0, 1)) +  
+  labs(x = "k", y = "C(k)", title = "Clustering coefficient: k vs. C(k)")
+```
+
+## Question 2:
+Depth first search: <br />
+*Node w:* <br />
+- Lexicographic: w, u, v, y, x, r, s, t, z <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\2a.PNG) <br />
+- Reverse lexicographic: w, y, z, x, r, t, s, v, u <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\2a_reverse.PNG) <br />
+
+*Node s:* <br />
+- Lexicographic: s, r, t, z, v, u, w, x, y <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\2b.PNG) <br />
+- Reverse lexicographic: s, t, z, y, x, w, v, u, r <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\2b_reverse.PNG){width=30% height=30%} <br />
+
+## Question 3:
+Breadth first search: <br />
+*Node w:* <br />
+- Lexicographic: w, u, v, x, y, z, r, t, s <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\3a.PNG){width=30% height=30%} <br />
+- Reverse lexicographic: w, y, x, v, u, z, r, t, s <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\3a_reverse.PNG){width=30% height=30%} <br />
+
+*Node s:* <br />
+- Lexicographic: s, r, t, x, z, w, y, v, u <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\3b.PNG){width=30% height=30%} <br />
+- Reverse lexicographic: s, t, r, z, x, y, v, w, u <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\3b_reverse.PNG){width=50% height=50%} <br />
+
+## Question 4: 
+```{r}
+starGraph <- make_full_graph(5, directed = F, loops = F)
+plot(starGraph)
+```
+
+## Question 5:
+
+## Graph A:
+First, load graph A into R:
+```{r}
+graphA <- read_graph("D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\HW2_2017networks\\HW2_2016networks\\graphA.txt", format = "edgelist", directed = F)
+```
+
+Now calculate its characteristics:
+```{r}
+#Graph A is sparse or not:
+egdeA <- ecount(graphA) #number of edges
+verticesA <- vcount(graphA) #number of vertices
+ratioA <- egdeA/verticesA
+ratioA #sparse or not
+```
+
+As ratioA is approximately 1, A seems to be sparse, in my opinion.
+
+```{r}
+diameterA <- diameter(graphA, directed = F, unconnected = TRUE, weights = NULL)
+diameterA #diameter of graph A
+```
+
+```{r}
+radiusA <- radius(graphA)
+radiusA #radius of graph A
+```
+
+```{r}
+aveClusCoA <- transitivity(graphA, type = "average")
+aveClusCoA #average clustering coefficient of graph A
+globalClusCoA <- transitivity(graphA, type = "global")
+globalClusCoA #global clustering coefficient of graph A
+```
+With the low average clustering coefficient and global clustering coefficient of graph A as calculated above, we can conclude graph A is not well connected.
+
+*Comparison between global clustering coefficient and average clustering coefficient:*
+- The global clustering coefficient is based on triplets of nodes. A triplet is defined as three nodes that are connected by either two (open triplet) or three (closed triplet) undirected ties. The global clustering coefficient is the number of closed triplets over the total number of triplets (both open and closed). This measure gives an indication of the clustering in the whole network (global). The global clustering coefficient is also called the transitivity.
+- Average clustering coefficient is a type of local clustering coefficient, calculated by taking the average of all nodes' clustering coefficient. This clustering coefficient indicates how close its neighbours are to being a clique (complete graph).
+- Given the definitions of average and global clustering coefficient, both of them can give us information of how connected a graph is.
+- However, global clustering coefficient puts more weight on high degree nodes (as in its formula, only close triplets are considered), while average clustering coefficient puts more weight on low degree nodes (all nodes, regardless of having high or low degree, are considered in the formula).
+
+
+```{r}
+avePathLength <- average.path.length(graphA, directed=F, unconnected=TRUE)
+avePathLength #average	shortest	path	length
+```
+
+*About centrality:* <br />
+- Centrality of a vertex measures its relative importance within a graph. There are different centrality measures that target at different types of node importance. <br />
+- Closeness centrality (or closeness) of a node is a measure of centrality in a network. It is calculated as the reciprocal of the sum of the length of the shortest paths between the node and all other nodes in the graph. Hence, a central a node is one that is close to all other nodes. <br />
+- Betweenness centrality is another centrality measure. It quanfies the number of times a node acts as a bridge along the shortest path between two other nodes. In this sense, a central node is one that involves in many paths although it may not directly connect to many other nodes. <br />
+- In iGraph, there are different functions to calculate each centrality. For example, to calculate closeness centrality, we can choose to use function *closeness()*, which calculates based on the original definition of closeness centrality; *closeness()* gives results that are often referred to as *raw closeness centrality*. In addition, iGraph also has another function called *centr_clo()*, which provides *normalized closeness centrality* (to understand how it normalizes, see documentation). This enables us to compare the closeness centrality of nodes of graphs of different sizes. Given this, the next steps of calculation will be using normalized centrality measures. <br />
+
+```{r}
+#closeness centrality
+closenessA <- centr_clo(graphA, normalized = T)$res
+#betweenness centrality
+betweennessA <- centr_betw(graphA, directed = F)$res
+```
+From here, I define central nodes are top 10% nodes that have the highest centrality. Note that closeness centrality and betweenness centrality will give us two different sets of central nodes. <br />
+```{r}
+topBetweennessA <- which(betweennessA > quantile(betweennessA, prob = 0.9))
+topClosenessA <- which(closenessA > quantile(closenessA, prob = 0.9))
+intersect(topBetweennessA, topClosenessA) # the nodes that are defined to be important by both measures
+```
+In the way I define important nodes for each measure, there are 7 nodes that are found to be central by both measures. Those 7 nodes are both close to other nodes and also serve as bridges from one part of the graph to another. <br />
+
+## Graph B:
+```{r}
+graphB <- read_graph("D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\HW2_2017networks\\HW2_2016networks\\graphB.txt", format = "edgelist", directed = F)
+```
+
+```{r}
+#Graph B is sparse or not:
+egdeB <- ecount(graphB) #number of edges
+verticesB <- vcount(graphB) #number of vertices
+ratioB <- egdeB/verticesB
+ratioB #sparse or not
+```
+
+As edgeB is much smaller than $verticesB^2$, B seems to be sparse, in my opinion.
+
+```{r}
+diameterB <- diameter(graphB, directed = F, unconnected = TRUE, weights = NULL)
+diameterB #diameter of graph B
+```
+
+```{r}
+radiusB <- radius(graphB)
+radiusB #radius of graph B
+```
+
+```{r}
+aveClusCoB <- transitivity(graphB, type = "average")
+aveClusCoB #average clustering coefficient of graph B
+globalClusCoB <- transitivity(graphB, type = "global")
+globalClusCoB #global clustering coefficient of graph B
+```
+
+```{r}
+avePathLengthB <- average.path.length(graphB, directed=F, unconnected=TRUE)
+avePathLengthB #average	shortest	path	length
+```
+
+```{r}
+#closeness centrality
+closenessB <- centr_clo(graphB, normalized = T)$res
+#betweenness centrality
+betweennessB <- centr_betw(graphB, directed = F)$res
+```
+
+```{r}
+topBetweennessB <- which(betweennessB > quantile(betweennessB, prob = 0.9))
+topClosenessB <- which(closenessB > quantile(closenessB, prob = 0.9))
+intersect(topBetweennessB, topClosenessB) # the nodes that are defined to be important by both measures
+```
+
+## Graph C:
+```{r}
+graphC <- read_graph("D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\HW2_2017networks\\HW2_2016networks\\graphC.txt", format = "edgelist", directed = F)
+```
+
+```{r}
+#Graph C is sparse or not:
+egdeC <- ecount(graphC) #number of edges
+verticesC <- vcount(graphC) #number of vertices
+ratioC <- egdeC/verticesC
+ratioC #sparse or not
+```
+
+As edgeC is much smaller than $verticesC^2$, C seems to be sparse, in my opinion.
+
+```{r}
+diameterC <- diameter(graphC, directed = F, unconnected = TRUE, weights = NULL)
+diameterC #diameter of graph C
+```
+
+```{r}
+radiusC <- radius(graphC)
+radiusC #radius of graph C
+```
+
+```{r}
+aveClusCoC <- transitivity(graphC, type = "average")
+aveClusCoC #average clustering coefficient of graph C
+globalClusCoC <- transitivity(graphC, type = "global")
+globalClusCoC #global clustering coefficient of graph C
+```
+
+```{r}
+avePathLengthC <- average.path.length(graphC, directed=F, unconnected=TRUE)
+avePathLengthC #average	shortest	path	length
+```
+
+```{r}
+#betweenness centrality
+betweennessC <- centr_betw(graphC, directed = F)$res
+```
+However, when calculating closeness centrality for graph C, I got a warning because C is disconnected. Although it's still possible to calculate closeness centrality by this function of iGraph, I do not think we should use the result. Hence, for graph C, I do not obtain a list of nodes that are central by both measures.
+```r
+#closeness centrality
+closenessC <- centr_clo(graphC, normalized = T)$res
+
+In centr_clo(graphC, normalized = T) :
+  At centrality.c:2784 :closeness centrality is not well-defined for disconnected graphs
+```
+
+```{r}
+topBetweennessC <- which(betweennessC > quantile(betweennessC, prob = 0.9))
+topBetweennessC
+```
+
+
+## Question 6:
+We say a graph follows a power-law distribution if the distribution of $P(k) \sim k^{-\lambda}$ for some $\lambda \in \mathbf{R}$.
+Following Clauset et al., the general outline to test if a graph follows power law distribution is: <br />
+1. Estimate the parameters of the power law model using the data. <br />
+2. Calculate the goodness-of-fit between the data and the power law. <br />
+3. Compare the power law with alternative hypotheses via a likelihood ratio test or any statistically principled approaches for model comparison, such as a fully Bayesian approach, a cross-validation approach, or a minimum description length approach. <br />
+
+There is an R package called *poweRlaw* that can help us test if a graph follows power law distribution. I will test graph B using *poweRlaw* and *iGraph* packages in the following part:
+```{r}
+suppressPackageStartupMessages(library(poweRlaw))
+graphB <- read_graph("D:\\Coursework\\BCB 570 Spring 2020\\Homework2\\HW2_2017networks\\HW2_2016networks\\graphB.txt", format = "edgelist", directed = F)
+
+#check P(k) of graph:
+nodes <- seq(0, vcount(graphB) - 1, 1)
+k_nodes <- degree(graphB)
+info <- data_frame(nodes, k_nodes) #summary of the nodes
+info %>% 
+  group_by(k_nodes) %>% 
+  summarise(n = n()) %>% 
+  mutate(freq = n / sum(n)) %>% 
+  ggplot(aes(x = k_nodes, y = freq)) + geom_bar(stat = "identity") + 
+  xlim(c(0, 100)) + ylim(c(0, 0.3)) +  
+  labs(x = "k", y = "P(k)", title = "Connectivity distribution: k vs. P(k)")
+
+```
+
+Looking at the connectivity distribution, we might have some idea that graph B may not follow power law distribution. <br />
+In iGraph, we can test the	goodness	of	fit of the degrees of graph B with power law distribution:
+```{r}
+fit_power_law(k_nodes)
+```
+
+Here, the function *fit_power_law* gives us the information that our degree data is discrete (by *\$continuous*), has the estimated exponent of litted power-law distribution of 3.35 (by *\$alpha*), that the data on fits after the value of 11 (by *\$xmin*). Moreover, *\$KS.p* tells us the p-value of the Kolmogorov-Smirnov test. Small p-values (less than 0.05) indicate that the test rejected the hypothesis that the original data could have been drawn from the fitted power-law distribution. So with $KS.p = 0.37$, we may say that the distribution of degrees greater than 11 of graph B follows power-law distribution. <br />
+
+We then can test if there is a better fit model for our data set. For example, let's see if Poisson distribution fits our data set better:
+```{r}
+data <- displ$new(k_nodes)
+est <- estimate_xmin(data)
+data$xmin <- est$xmin
+data$pars <- est$pars
+data_pois <- dispois$new(k_nodes)
+data_pois$xmin <- est$xmin
+data_pois$pars <- estimate_pars(data_pois)
+compare <- compare_distributions(data, data_pois)
+```
+
+From *poweRlaw* package's description of function *compare_distributions*: "This function compares two models. The null hypothesis is that both classes of distributions are equally far from the true distribution. If this is true, the log-likelihood ratio should (asymptotically) have a Normal distribution with mean zero. The test statistic is the sample average of the log-likelihood ratio, standardized by a consistent estimate of its standard deviation. If the null hypothesis is false, and one class of distributions is closer to the "truth", the test statistic goes to +/-infinity with probability 1, indicating the better-fitting class of distributions." This function returns *test_statistics*, which is the test statistics of the test performed - if the test statistics is positive then power-law distribution is better fit; and returns *p_two_sided*, indicating how significance the difference is.
+```{r}
+compare$test_statistic
+compare$p_two_sided
+```
+With this result, we can conclude that for graphB, power-law distribution is a better fit than Poisson distribution. <br />
+
+Doing the same tests for graph A and graph C, we get graph A and C also follow power-law distribution. <br />
+
+
+## Question 7:
+The analysis can be carried out in the following steps: <br />
+- Determine if the graph follows power-law distribution by following the steps listed in Question 6. <br />
+- When estimating the exponent of the power-law distribution, if the exponent is in range 2 to 3, the graph might be a scale free one. This is not always true, but can be a good indication. <br />
+- We can also plot k vs C(k) on log scale; if the plot is approximately a straight line, it may indicate the graph is scale free. <br />
+
+As our graphs are all power-law, they are scale free.
+
+
+## Reference
+Clauset A, Shalizi CR, Newman MEJ, "Power-Law Distributions in Empirical Data," SIAM Review, Vol 51, No 4, 661-703.
+
+
+
+
+
+
+
+
+ 

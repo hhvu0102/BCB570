@@ -1,0 +1,334 @@
+---
+title: "Homework 3"
+author: "Vu Thi-Hong-Ha"
+date: "February 15, 2020"
+output: html_document
+---
+
+```{r setup, message = FALSE, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readxl", warn.conflicts = FALSE)
+library("igraph", warn.conflicts = FALSE)
+library("ggplot2", warn.conflicts = FALSE)
+library("tidyverse", warn.conflicts = FALSE)
+library("RCy3", warn.conflicts = FALSE)
+```
+
+## Question 1:
+Load the graph data into R:
+```{r}
+y2h <- graph_from_data_frame(read_excel("D:/Coursework/BCB 570 Spring 2020/Homework3/Y2H_uniondata.xlsx", col_names = TRUE), directed = F)
+ccbs <- graph_from_data_frame(read_excel("D:/Coursework/BCB 570 Spring 2020/Homework3/CCSB_YI1.xlsx", col_names = TRUE), directed = F)
+```
+Note that the two graphs contain self loops and multiple edges, so I exclude these elements from the graphs:
+```{r}
+y2h <- igraph::simplify(y2h)
+ccbs <- igraph::simplify(ccbs)
+```
+Next, check if the graphs are connected:
+```{r}
+is_connected(y2h)
+is_connected(ccbs)
+```
+As both of the graphs are not connected, I will analyze the largest connected component of each network:
+```{r}
+y2h.connected <- clusters(y2h)
+y2h.connected$no
+which.max(y2h.connected$csize)
+y2h.connected$csize[which.max(y2h.connected$csize)]
+```
+We can see that Y2H has 185 connected component, component 3 has the largest size with 1647 nodes. Now, take a closer look at component 3.
+```{r}
+y2h_largestConnected <- decompose.graph(y2h)[[3]]
+```
+Do the same for CCBS:
+```{r}
+ccbs.connected <- clusters(ccbs)
+ccbs.connected$no
+which.max(ccbs.connected$csize)
+ccbs.connected$csize[which.max(ccbs.connected$csize)]
+```
+CCBS has 162 connected component, component 1 has the largest size with 964 nodes. 
+```{r}
+ccbs_largestConnected <- decompose.graph(ccbs)[[1]]
+```
+
+
+*a* <br />
+Now we analyze some characteristics of the graphs by running the following code:
+```{r}
+#return the ratio between number of edges and number of vertices to decide whether the graph is sparse or not
+sparse <- function(graph) {
+  edge <- ecount(graph)
+  vertices <- vcount(graph)
+  ratio <- edge/vertices
+  
+  return(ratio)
+}
+sparse(y2h_largestConnected)
+diameter(y2h_largestConnected, directed = F, unconnected = TRUE, weights = NULL)
+radius(y2h_largestConnected)
+transitivity(y2h_largestConnected, type = "average")
+transitivity(y2h_largestConnected, type = "global")
+average.path.length(y2h_largestConnected, directed=F, unconnected=TRUE)
+```
+
+Then we will have some characteristics of two graphs as below:
+
+|Characteristics                 |Y2h         | Ccbn       |
+|--------------------------------|------------|------------|
+|Sparsity                        |Yes         |Yes         |
+|Diameter                        |$14$        |$14$        |
+|Radius                          |$8$         |$8$         |
+|Average clustering coefficient  |$0.102$     |$0.107$     |
+|Global clustering coefficient   |$0.024$     |$0.021$     |
+|Average	shortest	path	length |$5.61$      |$5.37$      |
+
+Now we can check the connectivity of the graphs by plotting the connectivity distribution:
+```{r}
+plot_ConDis <- function(graph) {
+  nodes <- seq(0, vcount(graph) - 1, 1)
+  k_nodes <- degree(graph)
+  info <- tibble(nodes, k_nodes) #summary of the nodes
+  info %>% 
+    group_by(k_nodes) %>% 
+    summarise(n = n()) %>% 
+    mutate(freq = n / sum(n)) %>% 
+    ggplot(aes(x = log(k_nodes), y = log(freq))) + geom_point() + 
+      labs(x = "log(k)", y = "log(P(k))", title = "Connectivity distribution: k vs. P(k)")
+}
+
+plot_ConDis(y2h_largestConnected)
+```
+
+Similarly, look at CCBS connectivity distribution:
+```{r}
+plot_ConDis(ccbs_largestConnected)
+```
+
+Looking at the plots, we may guess that the two graphs have power law distribution. Now let's check it:
+```{r}
+pow_y2h <- fit_power_law(degree(y2h_largestConnected))
+pow_ccbs <- fit_power_law(degree(ccbs_largestConnected))
+```
+
+By the staticstics returned above, we can see that Y2H that can be fitted into a power law distribution with $\alpha = 2.78$. As $KS.p > 0.05$, we fail to reject that Y2H follows power law distribution. Hence, Y2H has power law distribution, and with the estimated $\alpha$ between 2 and 3, it is also scale free. Thus, Y2H may be small world. <br />
+Similarly, CCBS follows a power law distribution with $\alpha = 2.68$ and $KS.p > 0.05$. CCBS is also scale free, and may be small world. <br />
+Now, we test if the two graphs are small world. The approach is as the following: <br />
+1. Calculate the average shortest path length $L$ and the clustering coefficient $C$ of the network. <br />
+2. Generate a null-model networks using Erdős–Rényi random graphs. <br />
+3. Calculate the average of the mean shortest path length $L_r$ and clustering coefficient $C_r$ of the ensemble of null-model networks. <br />
+4. Calculate the normalised shortest path $a=L/L_r$ and $b=C/C_r$. If $a \approx 1$ and $b>1$, we say the network a small-world network. <br />
+Now let us define a function to test:
+```{r}
+testSmallWork <- function(graph, B) {
+  L <- average.path.length(graph, directed=F, unconnected=TRUE)
+  C <- transitivity(graph, type = "global")
+  numNodes <- vcount(graph)
+  numEdges <- ecount(graph)
+  L_null <- vector()
+  C_null <- vector()
+  result <- vector()
+  for (i in 1:B) {
+    null <- erdos.renyi.game(numNodes, numEdges, type = "gnm", directed = FALSE, loops = FALSE)
+    L_null[i] <- average.path.length(null, directed=F, unconnected=TRUE)
+    C_null[i] <- transitivity(null, type = "global")
+    L_norm <- L/L_null[i]
+    C_norm <- C/C_null[i]
+    if ( all.equal(1, L_norm, tol = 0.49) == TRUE & C_norm > 1) {
+      result[i] <- "Small-world"
+    }
+    else {
+      result[i] <- "Not-small-world"
+    }
+  }
+
+  return(length(which(result == "Small-world")))
+}
+```
+In this function, I generate random networks to test against our original network for B times. I define that if $95\%$ of B times the test concludes the tested network to be small-world, then it's small-world.
+
+```{r}
+testSmallWork(y2h_largestConnected, 10)
+```
+
+```{r}
+testSmallWork(ccbs_largestConnected, 10)
+```
+
+With this simulation, we can conclude that Y2H and CCBS are small-world.
+
+
+*b* <br />
+I define hubs to be the nodes whose top $90\%$ quantile degree.
+```{r}
+#calculate degrees
+hubs <- names(subset(degree(y2h_largestConnected), degree(y2h_largestConnected) > quantile(degree(y2h_largestConnected), .9)))
+```
+Load yeast deletion project data:
+```{r}
+yeast_del_data <- read.csv("D:/Coursework/BCB 570 Spring 2020/Homework3/Yeast_deletionProject_Fixed.csv", sep = ",", header = T)
+```
+Now let's see if the hubs agree with yeast deletion project data:
+```{r}
+top <- yeast_del_data[which(yeast_del_data$ORF %in% hubs), "ORF"]
+```
+We can see that there are 135 hub genes, but there are only 7 of them are in yeast deletion data. Now let's define a function that can generate sets of random genes and see if they are essential. This function will be used to test both datasets, Y2H and CCBS. The strategy is as the following:  <br />
+1. Find hubs in the tested dataset. <br />
+2. Choose a set of random genes. One set of random genes will have the same number of genes as the number of hubs the original data has. <br />
+3. Count the number of essential genes in each set of random genes. <br />
+4. Repeat step 2 and 3 for B times. As a result, we will have a list of B number of essential genes, named list A. We then define a "reject region" as the (2.5\% quantile of A, 97.5\% quantile of A). If the number of essential genes in the original data falls into this reject region, we have evidence that the number of essential genes in the original data may not be statistically significant. <br />
+
+```{r}
+test_essentiality <- function(graph, B, centrality_method) {
+  if (centrality_method == "degree") {
+    hubs <- names(subset(degree(graph), degree(graph) > quantile(degree(graph), .9)))
+  }
+  else if (centrality_method == "betweenness") {
+    hubs <- names(subset(betweenness(graph), betweenness(graph) > quantile(betweenness(graph), .9)))
+  }
+  top <- yeast_del_data[which(yeast_del_data$ORF %in% hubs), "ORF"]
+  size <- length(hubs)
+  original_size <- length(top)
+  essentiality_counts <- vector()
+  
+  for (i in 1:B) {
+    rand_genes <- sample(gorder(graph), size)
+    rand_geneSet <- V(graph)$name[rand_genes]
+    rand_hubs <- yeast_del_data[which(yeast_del_data$ORF %in% rand_geneSet), "ORF"]
+    essentiality_counts[i] <- length(rand_hubs)
+  }
+  
+  lower_bound <- quantile(essentiality_counts, 0.025)
+  upper_bound <- quantile(essentiality_counts, 0.975)
+  
+  result <- c(lower_bound, upper_bound, original_size)
+  names(result) <- c("2.5%", "97.5%", "Original number of essential genes")
+  
+  return(result)
+}
+
+test_essentiality(y2h_largestConnected, 1000, "degree")
+test_essentiality(ccbs_largestConnected, 1000, "degree")
+```
+
+*c* <br />
+With this test, we can see that the original data Y2H and CCBS do not have more essential hubs than pure random chance. Therefore, we can conclude hubs with high degree in a network do not necessarily correlate with essentiality. This conclusion also agrees with Yu's conclusion in their paper.
+
+
+## Question 2:
+```{r}
+#load the BioGrid data
+biogrid <- graph_from_data_frame(read.table("D:/Coursework/BCB 570 Spring 2020/Homework3/BioGrid2018_uni-2", header = TRUE, sep = ""), directed = F)
+biogrid <- igraph::simplify(biogrid)
+is.connected(biogrid)
+sparse(biogrid) #given BioGrid has many nodes, this ratio indicatesthat BioGrid data is sparse
+diameter(biogrid, directed = F, unconnected = TRUE, weights = NULL)
+radius(biogrid)
+transitivity(biogrid, type = "average")
+transitivity(biogrid, type = "global")
+average.path.length(biogrid, directed=F, unconnected=TRUE)
+```
+
+Comparing with the other two smaller datsets: <br />
+
+|Characteristics                 |Y2h         | Ccbn       | BioGrid    |
+|--------------------------------|------------|------------|------------|
+|Sparsity                        |Yes         |Yes         |Yes         |
+|Diameter                        |$14$        |$14$        |$6$         |
+|Radius                          |$8$         |$8$         |$3$         |
+|Average clustering coefficient  |$0.102$     |$0.107$     |$0.33$      |
+|Global clustering coefficient   |$0.024$     |$0.021$     |$0.043$     |
+|Average	shortest	path	length |$5.61$      |$5.37$      |$2.335$     |
+
+The two smaller data sets have slightly different characteristics than BioGrid, probably because BioGrid is more recent and contains more information so it's more connected than the other two. <br />
+
+Now let's test if BioGrid is power-law or small world.
+```{r}
+plot_ConDis(biogrid)
+pow_biogrid <- fit_power_law(degree(biogrid))
+```
+
+We can see that the connectivity distribution plot of BioGrid looks quite similar to those of the smaller data. Moreover, when fitting power law distribution, we get $KS.p = 0.297 > 0.05$ and $\alpha \sim 2.689$; hence we fail to reject that BioGrid data  follows power law distribution, and it is also scale free. <br />
+Next, test if BioGrid data is small world:
+```{r}
+testSmallWork(biogrid, 10)
+```
+We also have BioGrid is small world. Now, we can see that BioGrid graph is scale-free and small world, which suggests that the data BioGrid has self-similarity. <br />
+Given the above analysis, I think BioGrid has some similarities to the smaller data sets. Moreover, as BioGrid data is a recent data set from physical data, it also contains the information from the smaller data sets. <br />
+
+
+## Quesion 3:
+*a*
+Let's look at the largest connected component in Y2H data `y2h_largestConnected`: <br />
+I define hubs to be genes with betweenness centrality in 90\% quantile. We obtain the essentiality by using `test_essentiality()` function:
+```{r}
+test_essentiality(y2h_largestConnected, 100, "betweenness")
+```
+We can see that hub genes defined by betweenness centrality do not correlate with essentiality.
+
+
+*b* <br />
+We can use package `RCy3` to transfer a network object of iGraph to Cytoscape and analyze the network using MCL of cytoscape. Just make sure your Cytoscape is open, then the following command will directly transfer the object to Cytoscape. I enclose my Cytoscape session file for your convenience.
+```{r}
+createNetworkFromIgraph(y2h_largestConnected,"myIgraph")
+```
+
+On the other hand, I also want to save the edges in the network for the randomization purpose downstream:
+```{r}
+y2h_forMCL <- as.data.frame(get.edgelist(y2h_largestConnected))
+```
+Using Cytoscape and its application called clusterMaker, I ran MCL with default parameters. Cytoscape identified 516 clusters, with the largest one of 38 nodes and 49 edges. I save the cluster information into a file and will load the result into R later for other analysis. The following picture is the network's clusters being laid out: <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework3\\MCL-clustered.png) <br />
+Now using the list of edges `y2h_forMCL`, I randomly picked 10\% and 25\% edges to remove, creating 2 new networks.
+```{r}
+pickEdges <- function(graph.df, size) {
+  rand_edges <- sample(dim(graph.df)[1], floor(size*dim(graph.df)[1]))
+  newEdge <- graph.df[rand_edges , ]
+  result <- graph_from_data_frame(newEdge, directed = F)
+  return(result)
+}
+
+y2h_90edges <- pickEdges(y2h_forMCL, 0.9)
+createNetworkFromIgraph(y2h_90edges, "90")
+
+y2h_75edges <- pickEdges(y2h_forMCL, 0.75)
+createNetworkFromIgraph(y2h_75edges, "75")
+```
+Images of the 2 networks: <br >
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework3\\y2h_90edges.png) <br />
+(Figure for network with 10\% edges removed randomly) <br />
+
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework3\\y2h_75edges.png) <br />
+(Figure for network with 25\% edges removed randomly) <br />
+
+For one run of removing 10\% of the egdes randomly, I got 20 clusters with the largest one of 1521 nodes and 2222 edges. For one run of removing 25\% of the egdes randomly, I got 54 clusters with the largest one of 1286 nodes and 1801 edges. Comparing this with the result of MCL (516 clusters, with the largest one of 38 nodes and 49 edges), we can see that MCL divided the network into many small clusters. I next calculate the modularity scores of the clusters identified by MCL, removing 10\% edges and removing 25\% edges.
+```{r}
+#load MCL results:
+y2h_mclResults <- read.csv("./y2h_MCLclusters default  node.csv", header = T)
+y2h_mclResults <- y2h_mclResults[, c("X__mclCluster", "id")] #get only the needed columns
+                                                             #X__mclCluster = module division, id = nodes
+#because modules that have only one member are not assigned a cluster number by Cytoscape, we manually assign the number
+y2h_mclResults[which(is.na(y2h_mclResults$X__mclCluster)), "X__mclCluster"] <- c(463:516)
+
+modularity(y2h_largestConnected, membership = y2h_mclResults$X__mclCluster)
+```
+
+I also calculate the modularity scores for the randomly removed edge networks:
+```{r}
+modularity(y2h_90edges, membership = clusters(y2h_90edges)$membership)
+modularity(y2h_75edges, membership = clusters(y2h_75edges)$membership)
+```
+
+Using this scoring scheme, we can see that the modularity scores go considerably lower if we remove the edge randomly. <br />
+
+*c* <br />
+I choose to look at the genes in the largest cluster identified by MCL with 38 genes.
+```{r}
+genes <- as.character(subset(y2h_mclResults$id, y2h_mclResults$X__mclCluster == 1))
+```
+Using Saccharomyces Genome Database gene ontology term finder - searching for "function" (https://www.yeastgenome.org/goTermFinder), we get the following results: <br />
+![Searching tree](D:\\Coursework\\BCB 570 Spring 2020\\Homework3\\SDB.PNG) <br />
+We can see there are a number of common functions: "catalytic activity", "metal ion binding", "cation binding", "thioredoxin peroxidase activity" and "lyase activity". <br />
+If we search for biological process, there will be a good number of terms enriched. I attached the results in a separate file named "question3_38genes_BP.txt". <br />
+However, notice that there are only 2 genes appeared in Yeast Deletion Project, namely YDR533C and YHR025W, and both of them do not have any known biological process information in Yeast Deletion Project.
